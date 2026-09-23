@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GitCompare, BarChart3, Users, ArrowRight, ShieldCheck } from 'lucide-react';
-import oceanViz from '../../asstes/ocean-visualization.jpeg';
+import oceanViz from '../../assets/ocean-visualization.jpeg';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
