@@ -1,14 +1,8 @@
 import { apiClient } from './apiClient';
 import { mockStakeholderPersonas, mockPfzData, mockSarData } from '../mockData/stakeholderData';
 import { StakeholderPersona, PotentialFishingZone, SarDriftForecast, StakeholderPersonaId } from '../types/stakeholder';
-import { stakeholderApiService } from '../pages/Stakeholders/services/stakeholderApi';
-
-export * from '../pages/Stakeholders/services/stakeholderApi';
 
 export const stakeholderService = {
-  // Real Render backend stakeholder API methods
-  api: stakeholderApiService,
-
   async getPersonas(): Promise<StakeholderPersona[]> {
     const res = await apiClient.get<StakeholderPersona[]>('/api/stakeholders/personas', mockStakeholderPersonas);
     return res.data;

@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { StakeholderConfig } from '../../data/stakeholderData';
 import ScientificPanel from '../common/ScientificPanel';
 import ActionButton from '../common/ActionButton';
 import ActionModal from '../common/ActionModal';
-import { stakeholderApiService, StudentData } from '../../services/stakeholderApi';
-import StakeholderLoadingState from '../common/StakeholderLoadingState';
-import StakeholderErrorState from '../common/StakeholderErrorState';
 
 interface StudentWorkspaceProps {
   config: StakeholderConfig;
@@ -17,71 +14,31 @@ export const StudentWorkspace: React.FC<StudentWorkspaceProps> = ({ config }) =>
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [quizScore, setQuizScore] = useState<{ q1?: boolean; q2?: boolean } | null>(null);
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [studentData, setStudentData] = useState<StudentData | null>(null);
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await stakeholderApiService.getStudentData();
-      setStudentData(res);
-      if (res.depthData?.depth != null) {
-        setDepth(res.depthData.depth);
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to fetch student educational telemetry from backend.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  if (isLoading) {
-    return <StakeholderLoadingState message="Loading ocean exploration data..." subtext="Querying /api/stakeholder/student" />;
-  }
-
-  if (error) {
-    return (
-      <StakeholderErrorState
-        title="Stakeholder data unavailable"
-        endpoint="GET /api/stakeholder/student"
-        error={error}
-        onRetry={loadData}
-      />
-    );
-  }
-
-  // Educational depth zoning calculation (enhanced with backend values if available)
   const getZoneInfo = (d: number) => {
     if (d <= 200) {
       return {
-        name: studentData?.depthData?.layerName || 'Sunlight Zone (Epipelagic)',
-        desc: studentData?.depthData?.layerDesc || 'Sunlight penetrates clearly. Photosynthetic phytoplankton thrive here, sustaining the primary ocean food web.',
-        temp: studentData?.depthData?.temperature != null && d === studentData.depthData.depth ? studentData.depthData.temperature : Math.round(28 - (d / 200) * 8),
-        sunlight: studentData?.depthData?.sunlight || `${Math.round(100 - (d / 200) * 90)}%`,
-        pressure: studentData?.depthData?.pressure || `${(1 + d / 10).toFixed(0)} atm`,
+        name: 'Sunlight Zone (Epipelagic)',
+        desc: 'Sunlight penetrates clearly. Photosynthetic phytoplankton thrive here, sustaining the primary ocean food web.',
+        temp: Math.round(28 - (d / 200) * 8),
+        sunlight: `${Math.round(100 - (d / 200) * 90)}%`,
+        pressure: `${(1 + d / 10).toFixed(0)} atm`,
       };
     } else if (d <= 900) {
       const frac = (d - 200) / 700;
       return {
-        name: studentData?.depthData?.layerName || 'Twilight Zone (Mesopelagic)',
-        desc: studentData?.depthData?.layerDesc || 'Rapidly diminishing light. Plants cannot grow. Marine organisms exhibit large eyes and bioluminescence.',
-        temp: studentData?.depthData?.temperature != null && d === studentData.depthData.depth ? studentData.depthData.temperature : Math.round(20 - frac * 13),
-        sunlight: studentData?.depthData?.sunlight || '< 1% (Dim Twilight)',
-        pressure: studentData?.depthData?.pressure || `${(1 + d / 10).toFixed(0)} atm`,
+        name: 'Twilight Zone (Mesopelagic)',
+        desc: 'Rapidly diminishing light. Plants cannot grow. Marine organisms exhibit large eyes and bioluminescence.',
+        temp: Math.round(20 - frac * 13),
+        sunlight: '< 1% (Dim Twilight)',
+        pressure: `${(1 + d / 10).toFixed(0)} atm`,
       };
     } else {
       return {
-        name: studentData?.depthData?.layerName || 'Midnight Zone (Bathypelagic)',
-        desc: studentData?.depthData?.layerDesc || 'Complete perpetual darkness. Temperatures near freezing. Organisms rely on organic marine snow from above.',
-        temp: studentData?.depthData?.temperature != null && d === studentData.depthData.depth ? studentData.depthData.temperature : 4,
-        sunlight: studentData?.depthData?.sunlight || '0% (Total Darkness)',
-        pressure: studentData?.depthData?.pressure || `${(1 + d / 10).toFixed(0)} atm`,
+        name: 'Midnight Zone (Bathypelagic)',
+        desc: 'Complete perpetual darkness. Temperatures near freezing. Organisms rely on organic marine snow from above.',
+        temp: 4,
+        sunlight: '0% (Total Darkness)',
+        pressure: `${(1 + d / 10).toFixed(0)} atm`,
       };
     }
   };

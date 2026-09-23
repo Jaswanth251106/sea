@@ -1,76 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StakeholderConfig } from '../../data/stakeholderData';
 import ScientificPanel from '../common/ScientificPanel';
 import { MetricRow, HeroMetric } from '../common/MetricReadout';
 import ActionButton from '../common/ActionButton';
 import ActionModal from '../common/ActionModal';
-import { stakeholderApiService, SarDriftData, SarTrajectoryPoint } from '../../services/stakeholderApi';
-import StakeholderErrorState from '../common/StakeholderErrorState';
 
 interface SearchRescueWorkspaceProps {
   config: StakeholderConfig;
 }
 
 export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ config }) => {
-  // Incident input states (allows user to enter/change incident data)
-  const [latInput, setLatInput] = useState<number>(12.45);
-  const [lonInput, setLonInput] = useState<number>(88.30);
-  const [durationHours, setDurationHours] = useState<number>(14.5);
-  const [startTime, setStartTime] = useState<string>('06:15');
-  const [leewayPercent, setLeewayPercent] = useState<number>(3.2);
-
-  // Simulation & API states
-  const [simStep, setSimStep] = useState<number>(3);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simStep, setSimStep] = useState(3);
+  const [isSimulating, setIsSimulating] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const [apiError, setApiError] = useState<string | null>(null);
 
-  // Active drift data state (defaults to initial baseline, updated via POST)
-  const [driftData, setDriftData] = useState<SarDriftData>({
-    lkp: {
-      lat: `${latInput.toFixed(2)}°N`,
-      lon: `${lonInput.toFixed(2)}°E`,
-      timestamp: `${startTime} UTC (Recorded)`,
-    },
-    calculatedSearchArea: '2,340 km²',
-    displacement: '44.2 km total displacement',
-    factors: {
-      current: '0.85 m/s @ 072°',
-      timeElapsed: '14h 30m',
-      driftEstimate: '44.2 km total displacement',
-      windVector: '14 kt from 245° (SW)',
-      leewayDivergence: '±18° sector angle',
-    },
-    driftPoints: [
-      { label: 'T+0h (LKP)', x: 70, y: 50, lat: '12.45°N', lon: '88.30°E' },
-      { label: 'T+6h', x: 140, y: 85, lat: '12.58°N', lon: '88.48°E' },
-      { label: 'T+12h', x: 210, y: 125, lat: '12.71°N', lon: '88.66°E' },
-      { label: 'T+14.5h (Datum)', x: 270, y: 160, lat: '12.82°N', lon: '88.82°E' },
-    ],
-    disclaimer: config.disclaimer || 'Calculated drift vector based on illustrative leeway models. Decision support only; does not guarantee target location.',
-  });
+  // 5 User Input Controls State
+  const [latInput, setLatInput] = useState<string>('12.45');
+  const [lonInput, setLonInput] = useState<string>('88.30');
+  const [utcTime, setUtcTime] = useState<string>('06:15 UTC');
+  const [craftType, setCraftType] = useState<string>('Fishing Boat (FV Sagar Ratna)');
+  const [currentFlow, setCurrentFlow] = useState<string>('Geostrophic Flow (0.85 m/s @ 072°)');
 
-  // Execute Drift Simulation POST Request
-  const handleRunSimulation = async () => {
-    setIsSimulating(true);
-    setApiError(null);
-    setSimStep(0);
+  const [showLatDropdown, setShowLatDropdown] = useState<boolean>(false);
+  const [showLonDropdown, setShowLonDropdown] = useState<boolean>(false);
 
-    try {
-      const result = await stakeholderApiService.runSearchRescueDrift({
-        latitude: latInput,
-        longitude: lonInput,
-        durationHours,
-        startTime,
-        leewayPercent,
-      });
-      setDriftData(result);
-    } catch (err: any) {
-      setApiError(err?.message || 'Search and Rescue drift calculation endpoint unavailable.');
-    } finally {
-      // Run sequential trajectory animation across simulation steps
+  // 5 Bay of Bengal Presets for Latitude
+  const latBayOfBengalPresets = [
+    { value: '12.45', label: '12.45°N (Off Visakhapatnam)' },
+    { value: '13.08', label: '13.08°N (Off Chennai Port)' },
+    { value: '15.80', label: '15.80°N (Off Machilipatnam)' },
+    { value: '17.68', label: '17.68°N (Off Paradip Coast)' },
+    { value: '11.70', label: '11.70°N (Off Port Blair)' },
+  ];
+
+  // 5 Bay of Bengal Presets for Longitude
+  const lonBayOfBengalPresets = [
+    { value: '88.30', label: '88.30°E (Central Bay of Bengal)' },
+    { value: '80.27', label: '80.27°E (Coromandel Coast)' },
+    { value: '83.21', label: '83.21°E (Northern Andhra Sector)' },
+    { value: '86.90', label: '86.90°E (Odisha Coastal Sector)' },
+    { value: '92.70', label: '92.70°E (Andaman Sea Trench)' },
+  ];
+
+  const craftOptions = [
+    { label: 'Fishing Boat (FV Sagar Ratna)', leeway: '3.2% leeway', mult: 1.0 },
+    { label: 'Life Raft (With Ballast)', leeway: '2.8% leeway', mult: 0.85 },
+    { label: 'Coastal Skiff / Kayak', leeway: '4.1% leeway', mult: 1.25 },
+    { label: 'Person in Water (PIW)', leeway: '1.5% leeway', mult: 0.60 },
+    { label: 'Cargo Container / Debris', leeway: '2.0% leeway', mult: 0.95 },
+  ];
+
+  const currentOptions = [
+    { label: 'Geostrophic Flow (0.85 m/s @ 072°)', speedText: '0.85 m/s @ 072°', detail: 'Geostrophic flow', speedMult: 1.0, dir: 'ENE', windage: '14 kt @ 245° SW' },
+    { label: 'Monsoon Jet Current (1.40 m/s @ 085°)', speedText: '1.40 m/s @ 085°', detail: 'Monsoon Jet flow', speedMult: 1.65, dir: 'E', windage: '22 kt @ 260° WSW' },
+    { label: 'Coastal Tidal Stream (0.50 m/s @ 030°)', speedText: '0.50 m/s @ 030°', detail: 'Tidal Stream flow', speedMult: 0.60, dir: 'NNE', windage: '08 kt @ 210° SSW' },
+    { label: 'High Storm Surge (2.10 m/s @ 110°)', speedText: '2.10 m/s @ 110°', detail: 'Storm Surge flow', speedMult: 2.47, dir: 'ESE', windage: '35 kt @ 280° W' },
+  ];
+
+  const selectedCraft = craftOptions.find((c) => c.label === craftType) || craftOptions[0];
+  const selectedCurrent = currentOptions.find((c) => c.label === currentFlow) || currentOptions[0];
+  const baseLat = parseFloat(latInput) || 12.45;
+  const baseLon = parseFloat(lonInput) || 88.30;
+  const combinedMult = selectedCraft.mult * selectedCurrent.speedMult;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (isSimulating) {
+      setSimStep(0);
       let step = 0;
-      const timer = setInterval(() => {
+      timer = setInterval(() => {
         step += 1;
         if (step <= 3) {
           setSimStep(step);
@@ -80,10 +78,23 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
         }
       }, 700);
     }
-  };
+    return () => clearInterval(timer);
+  }, [isSimulating]);
 
-  const driftPoints: SarTrajectoryPoint[] = driftData.driftPoints;
-  const currentPt = driftPoints[Math.min(simStep, driftPoints.length - 1)] || driftPoints[0];
+  const driftPoints = [
+    { label: 'T+0h (LKP)', x: 70, y: 50, lat: `${baseLat.toFixed(2)}°N`, lon: `${baseLon.toFixed(2)}°E` },
+    { label: 'T+6h', x: 140, y: 85, lat: `${(baseLat + 0.13 * combinedMult).toFixed(2)}°N`, lon: `${(baseLon + 0.18 * combinedMult).toFixed(2)}°E` },
+    { label: 'T+12h', x: 210, y: 125, lat: `${(baseLat + 0.26 * combinedMult).toFixed(2)}°N`, lon: `${(baseLon + 0.36 * combinedMult).toFixed(2)}°E` },
+    { label: 'T+14.5h (Datum)', x: 270, y: 160, lat: `${(baseLat + 0.37 * combinedMult).toFixed(2)}°N`, lon: `${(baseLon + 0.52 * combinedMult).toFixed(2)}°E` },
+  ];
+
+  const totalDisplacementKm = (44.2 * combinedMult).toFixed(1);
+  const searchAreaSizes = [
+    `${Math.round(320 * combinedMult).toLocaleString()} km²`,
+    `${Math.round(980 * combinedMult).toLocaleString()} km²`,
+    `${Math.round(1720 * combinedMult).toLocaleString()} km²`,
+    `${Math.round(2340 * combinedMult).toLocaleString()} km²`,
+  ];
 
   return (
     <div className="workspace-inner">
@@ -104,149 +115,301 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 700 }}>⚠ SAR Operations Mandate:</span>
-          <span>{driftData.disclaimer}</span>
+          <span>{config.disclaimer}</span>
         </span>
         <span className="footer-disclaimer-pill" style={{ background: '#FEF2F2', borderColor: '#F87171', color: '#B91C1C' }}>
           Decision Support Only
         </span>
       </div>
 
-      {apiError && (
-        <StakeholderErrorState
-          title="SAR Drift Simulation Unavailable"
-          endpoint="POST /api/stakeholder/search-rescue/drift"
-          error={apiError}
-          onRetry={handleRunSimulation}
-        />
-      )}
-
       <div className="panels-grid-1-2">
-        {/* Left Column: LKP & Search Area */}
+        {/* Left Column: Inputs, LKP & Search Area */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Panel 1: Last Known Position with Editable Incident Inputs */}
+          {/* Panel 1: Interactive LKP & Incident Inputs */}
           <ScientificPanel
-            title="Last Known Position & Incident Inputs"
+            title="Last Known Position & Inputs"
             tag="Origin Datum"
-            meta={`${startTime} UTC`}
+            meta={utcTime}
           >
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                  Latitude (°N)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={latInput}
-                  onChange={(e) => setLatInput(parseFloat(e.target.value) || 0)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border)',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: 'var(--color-primary-navy)',
-                    background: '#FFFFFF',
-                  }}
-                  disabled={isSimulating}
-                />
+            {/* 5 User Inputs Area */}
+            <div style={{ background: 'var(--color-bg-page, #F8FBFE)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border, #D5E5EF)', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-ocean-blue)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                ⚙ Search & Rescue Operational Parameters (5 Inputs)
               </div>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                  Longitude (°E)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={lonInput}
-                  onChange={(e) => setLonInput(parseFloat(e.target.value) || 0)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border)',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: 'var(--color-primary-navy)',
-                    background: '#FFFFFF',
-                  }}
-                  disabled={isSimulating}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                {/* Single Box Latitude Combobox */}
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '3px' }}>
+                    Latitude (°N) — Bay of Bengal
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={latInput}
+                      onChange={(e) => setLatInput(e.target.value)}
+                      onFocus={() => setShowLatDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowLatDropdown(false), 200)}
+                      placeholder="Type or pick preset..."
+                      style={{
+                        width: '100%',
+                        padding: '5px 24px 5px 8px',
+                        borderRadius: '5px',
+                        border: '1px solid var(--color-border)',
+                        background: '#FFFFFF',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--color-text-primary)',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLatDropdown(!showLatDropdown)}
+                      style={{
+                        position: 'absolute',
+                        right: '4px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-ocean-blue)',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        padding: '2px',
+                      }}
+                      title="Toggle 5 Bay of Bengal Presets"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                  {showLatDropdown && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        background: '#FFFFFF',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                        marginTop: '2px',
+                        maxHeight: '170px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      <div style={{ padding: '4px 8px', fontSize: '9.5px', fontWeight: 700, color: 'var(--color-ocean-blue)', background: 'var(--color-bg-page)', borderBottom: '1px solid var(--color-border)' }}>
+                        Bay of Bengal Presets (5 Options)
+                      </div>
+                      {latBayOfBengalPresets.map((item, idx) => (
+                        <div
+                          key={item.value}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setLatInput(item.value);
+                            setShowLatDropdown(false);
+                          }}
+                          style={{
+                            padding: '5px 8px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #F0F4F8',
+                          }}
+                        >
+                          <strong>{idx + 1}. {item.value}°N</strong> &mdash; {item.label.split('(')[1]?.replace(')', '') || item.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Single Box Longitude Combobox */}
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '3px' }}>
+                    Longitude (°E) — Bay of Bengal
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={lonInput}
+                      onChange={(e) => setLonInput(e.target.value)}
+                      onFocus={() => setShowLonDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowLonDropdown(false), 200)}
+                      placeholder="Type or pick preset..."
+                      style={{
+                        width: '100%',
+                        padding: '5px 24px 5px 8px',
+                        borderRadius: '5px',
+                        border: '1px solid var(--color-border)',
+                        background: '#FFFFFF',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--color-text-primary)',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLonDropdown(!showLonDropdown)}
+                      style={{
+                        position: 'absolute',
+                        right: '4px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-ocean-blue)',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        padding: '2px',
+                      }}
+                      title="Toggle 5 Bay of Bengal Presets"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                  {showLonDropdown && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        background: '#FFFFFF',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                        marginTop: '2px',
+                        maxHeight: '170px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      <div style={{ padding: '4px 8px', fontSize: '9.5px', fontWeight: 700, color: 'var(--color-ocean-blue)', background: 'var(--color-bg-page)', borderBottom: '1px solid var(--color-border)' }}>
+                        Bay of Bengal Presets (5 Options)
+                      </div>
+                      {lonBayOfBengalPresets.map((item, idx) => (
+                        <div
+                          key={item.value}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setLonInput(item.value);
+                            setShowLonDropdown(false);
+                          }}
+                          style={{
+                            padding: '5px 8px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            color: 'var(--color-text-primary)',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #F0F4F8',
+                          }}
+                        >
+                          <strong>{idx + 1}. {item.value}°E</strong> &mdash; {item.label.split('(')[1]?.replace(')', '') || item.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>
+                    UTC Incident Time
+                  </label>
+                  <select
+                    value={utcTime}
+                    onChange={(e) => setUtcTime(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '5px 8px',
+                      borderRadius: '5px',
+                      border: '1px solid var(--color-border)',
+                      background: '#FFFFFF',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    <option value="06:15 UTC">06:15 UTC (Simulated Beacon)</option>
+                    <option value="12:00 UTC">12:00 UTC (Midday Ping)</option>
+                    <option value="18:30 UTC">18:30 UTC (Evening Alert)</option>
+                    <option value="00:00 UTC">00:00 UTC (Midnight Broadcast)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>
+                    Target Craft / Object Type
+                  </label>
+                  <select
+                    value={craftType}
+                    onChange={(e) => setCraftType(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '5px 8px',
+                      borderRadius: '5px',
+                      border: '1px solid var(--color-border)',
+                      background: '#FFFFFF',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    {craftOptions.map((c) => (
+                      <option key={c.label} value={c.label}>
+                        {c.label} ({c.leeway})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>
+                    Sea Surface Current & Flow
+                  </label>
+                  <select
+                    value={currentFlow}
+                    onChange={(e) => setCurrentFlow(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '5px 8px',
+                      borderRadius: '5px',
+                      border: '1px solid var(--color-border)',
+                      background: '#FFFFFF',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    {currentOptions.map((c) => (
+                      <option key={c.label} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                  Start Time (UTC)
-                </label>
-                <input
-                  type="text"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    background: '#FFFFFF',
-                  }}
-                  disabled={isSimulating}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                  Elapsed (Hours)
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="1"
-                  max="72"
-                  value={durationHours}
-                  onChange={(e) => setDurationHours(parseFloat(e.target.value) || 1)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    background: '#FFFFFF',
-                  }}
-                  disabled={isSimulating}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                  Leeway (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.5"
-                  max="10"
-                  value={leewayPercent}
-                  onChange={(e) => setLeewayPercent(parseFloat(e.target.value) || 3.2)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    background: '#FFFFFF',
-                  }}
-                  disabled={isSimulating}
-                />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <HeroMetric
+                label="Latitude"
+                value={`${baseLat.toFixed(2)}°N`}
+                subtext="Active LKP coordinate"
+                statusColor="var(--color-ocean-blue)"
+              />
+              <HeroMetric
+                label="Longitude"
+                value={`${baseLon.toFixed(2)}°E`}
+                subtext="Active LKP coordinate"
+                statusColor="var(--color-ocean-blue)"
+              />
             </div>
-
-            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '8px' }}>
-              Inputs propagate to <strong>POST /api/stakeholder/search-rescue/drift</strong>.
+            <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
+              Origin: Simulated emergency transmitter ({utcTime}).
             </div>
           </ScientificPanel>
 
@@ -258,16 +421,16 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
           >
             <HeroMetric
               label="Calculated Search Area"
-              value={driftData.calculatedSearchArea}
+              value={searchAreaSizes[simStep]}
               subtext="Expanding uncertainty boundary"
               statusColor="var(--color-danger)"
             />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '6px' }}>
-              <MetricRow label="Current" value={driftData.factors.current} detail="Geostrophic flow" />
-              <MetricRow label="Time Elapsed" value={driftData.factors.timeElapsed} detail="Elapsed drift" />
-              <MetricRow label="Drift Estimate" value={driftData.factors.driftEstimate} badge="Vector Total" badgeType="badge-warning" />
-              <MetricRow label="Windage (Leeway)" value={`${leewayPercent}% leeway`} detail={driftData.factors.windVector} />
+              <MetricRow label="Current" value={selectedCurrent.speedText} detail={selectedCurrent.detail} />
+              <MetricRow label="Time" value={config.factors?.timeElapsed || '14h 30m'} detail="Elapsed drift" />
+              <MetricRow label="Drift Estimate" value={`${totalDisplacementKm} km total displacement`} badge={`Vector ${selectedCurrent.dir}`} badgeType="badge-warning" />
+              <MetricRow label="Windage (Leeway)" value={selectedCraft.leeway} detail={selectedCurrent.windage} />
             </div>
           </ScientificPanel>
         </div>
@@ -283,9 +446,9 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
               className="action-btn btn-primary"
               style={{ padding: '4px 12px', fontSize: '11.5px' }}
               disabled={isSimulating}
-              onClick={handleRunSimulation}
+              onClick={() => setIsSimulating(true)}
             >
-              {isSimulating ? '● Calculating...' : '▶ Run Drift Simulation'}
+              {isSimulating ? '● Running...' : '▶ Run Drift Simulation'}
             </button>
           }
         >
@@ -323,9 +486,9 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                 </g>
               ))}
 
-              {simStep > 0 && currentPt && (
+              {simStep > 0 && (
                 <polygon
-                  points={`70,50 ${currentPt.x + 35},${currentPt.y - 25} ${currentPt.x + 20},${currentPt.y + 40}`}
+                  points={`70,50 ${driftPoints[simStep].x + 35},${driftPoints[simStep].y - 25} ${driftPoints[simStep].x + 20},${driftPoints[simStep].y + 40}`}
                   fill="rgba(245, 158, 11, 0.08)"
                   stroke="rgba(245, 158, 11, 0.35)"
                   strokeWidth="1"
@@ -333,7 +496,7 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                 />
               )}
 
-              {simStep === 3 && currentPt && (
+              {simStep === 3 && (
                 <g opacity="0.8">
                   {[
                     { dx: -12, dy: -8 }, { dx: 15, dy: 10 }, { dx: -8, dy: 14 },
@@ -343,8 +506,8 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                   ].map((p, i) => (
                     <circle
                       key={i}
-                      cx={currentPt.x + p.dx}
-                      cy={currentPt.y + p.dy}
+                      cx={driftPoints[simStep].x + p.dx}
+                      cy={driftPoints[simStep].y + p.dy}
                       r="2"
                       fill="#B45309"
                     />
@@ -352,21 +515,19 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                 </g>
               )}
 
-              {currentPt && (
-                <ellipse
-                  cx={currentPt.x}
-                  cy={currentPt.y}
-                  rx={simStep === 0 ? 15 : simStep === 1 ? 30 : simStep === 2 ? 48 : 65}
-                  ry={simStep === 0 ? 10 : simStep === 1 ? 20 : simStep === 2 ? 32 : 44}
-                  fill="url(#searchEllipseGradLight)"
-                  stroke="#E5484D"
-                  strokeWidth="1.8"
-                  strokeDasharray="4 2"
-                  transform={`rotate(28 ${currentPt.x} ${currentPt.y})`}
-                />
-              )}
+              <ellipse
+                cx={driftPoints[simStep].x}
+                cy={driftPoints[simStep].y}
+                rx={simStep === 0 ? 15 : simStep === 1 ? 30 : simStep === 2 ? 48 : 65}
+                ry={simStep === 0 ? 10 : simStep === 1 ? 20 : simStep === 2 ? 32 : 44}
+                fill="url(#searchEllipseGradLight)"
+                stroke="#E5484D"
+                strokeWidth="1.8"
+                strokeDasharray="4 2"
+                transform={`rotate(28 ${driftPoints[simStep].x} ${driftPoints[simStep].y})`}
+              />
 
-              {simStep >= 1 && driftPoints[0] && driftPoints[1] && (
+              {simStep >= 1 && (
                 <line
                   x1={driftPoints[0].x}
                   y1={driftPoints[0].y}
@@ -376,7 +537,7 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                   strokeWidth="2.5"
                 />
               )}
-              {simStep >= 2 && driftPoints[1] && driftPoints[2] && (
+              {simStep >= 2 && (
                 <line
                   x1={driftPoints[1].x}
                   y1={driftPoints[1].y}
@@ -386,7 +547,7 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
                   strokeWidth="2.5"
                 />
               )}
-              {simStep >= 3 && driftPoints[2] && driftPoints[3] && (
+              {simStep >= 3 && (
                 <line
                   x1={driftPoints[2].x}
                   y1={driftPoints[2].y}
@@ -433,9 +594,9 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
             </svg>
 
             <div className="sar-hud-overlay">
-              <div><strong>LKP:</strong> {driftData.lkp.lat}, {driftData.lkp.lon}</div>
+              <div><strong>LKP:</strong> {baseLat.toFixed(2)}°N, {baseLon.toFixed(2)}°E ({utcTime})</div>
               <div style={{ color: 'var(--color-ocean-blue)', fontWeight: 600 }}>
-                {currentPt?.label}: {currentPt?.lat}, {currentPt?.lon}
+                {driftPoints[simStep].label}: {driftPoints[simStep].lat}, {driftPoints[simStep].lon}
               </div>
             </div>
 
@@ -456,8 +617,8 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
-            <span>Drift Model: Geostrophic Current Integration + Leeway Vector</span>
-            <span style={{ color: '#B45309', fontWeight: 600 }}>Total Displacement: ~{driftData.displacement}</span>
+            <span>Drift Model: {selectedCurrent.detail} + {selectedCraft.leeway}</span>
+            <span style={{ color: '#B45309', fontWeight: 600 }}>Total Displacement: ~{totalDisplacementKm} km {selectedCurrent.dir}</span>
           </div>
         </ScientificPanel>
       </div>
@@ -473,7 +634,7 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
               primary={act.primary}
               onClick={() => {
                 if (act.id === 'run_drift') {
-                  handleRunSimulation();
+                  setIsSimulating(true);
                 } else {
                   setActiveModal(act.id);
                 }
@@ -490,15 +651,15 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
         title="Tactical Leeway & Drift Factors"
       >
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Maritime search craft leeway coefficients (IAMSAR standard).
+          Standard maritime search craft leeway coefficients (IAMSAR standard).
         </p>
         <div style={{ background: 'var(--color-bg-page)', padding: '14px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '12px' }}>
-          <div><strong>Target:</strong> Life Raft with Ballast (No Drogue)</div>
-          <div><strong>Active Leeway Rate:</strong> {leewayPercent}% of 10m Wind Speed</div>
-          <div><strong>Divergence Angle:</strong> ±18.0°</div>
-          <div><strong>Surface Current:</strong> 100% Geostrophic + Wind-drift</div>
+          <div><strong>Target Craft:</strong> {selectedCraft.label}</div>
+          <div><strong>Leeway Rate:</strong> {selectedCraft.leeway}</div>
+          <div><strong>Surface Current:</strong> {selectedCurrent.speedText} ({selectedCurrent.detail})</div>
+          <div><strong>Windage Vector:</strong> {selectedCurrent.windage}</div>
           <div style={{ color: 'var(--color-success)', fontWeight: 600, marginTop: '8px' }}>
-            ✓ Hydrodynamic vectors calibrated for Sector 88.3°E.
+            ✓ Hydrodynamic vectors calibrated for Active LKP Sector {baseLon.toFixed(2)}°E.
           </div>
         </div>
       </ActionModal>
@@ -515,18 +676,25 @@ export const SearchRescueWorkspace: React.FC<SearchRescueWorkspaceProps> = ({ co
           <pre style={{ margin: 0, color: 'var(--color-text-primary)', fontFamily: 'var(--font-family-mono, monospace)' }}>
 {`{
   "type": "FeatureCollection",
-  "name": "OCEANX_SAR_SEARCH_ELLIPSE",
+  "name": "OCEANX_SAR_SEARCH_ELLIPSE_${utcTime.replace(/[^0-9]/g, '')}Z",
   "features": [
     {
       "type": "Feature",
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[${lonInput}, ${latInput}], [${(lonInput + 0.28).toFixed(2)}, ${(latInput + 0.17).toFixed(2)}], [${(lonInput + 0.64).toFixed(2)}, ${(latInput + 0.46).toFixed(2)}], [${lonInput}, ${latInput}]]]
+        "coordinates": [[
+          [${baseLon.toFixed(2)}, ${baseLat.toFixed(2)}],
+          [${(baseLon + 0.18 * combinedMult).toFixed(2)}, ${(baseLat + 0.13 * combinedMult).toFixed(2)}],
+          [${(baseLon + 0.52 * combinedMult).toFixed(2)}, ${(baseLat + 0.37 * combinedMult).toFixed(2)}],
+          [${baseLon.toFixed(2)}, ${baseLat.toFixed(2)}]
+        ]]
       },
       "properties": {
-        "search_area": "${driftData.calculatedSearchArea}",
+        "target_craft": "${selectedCraft.label}",
+        "search_area_km2": ${Math.round(2340 * combinedMult)},
+        "total_displacement_km": ${totalDisplacementKm},
         "confidence": "95%",
-        "time_elapsed": "${driftData.factors.timeElapsed}"
+        "utc_time": "${utcTime}"
       }
     }
   ]

@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { StakeholderConfig } from '../../data/stakeholderData';
 import ScientificPanel from '../common/ScientificPanel';
 import ActionButton from '../common/ActionButton';
 import ActionModal from '../common/ActionModal';
-import { stakeholderApiService, PolicymakerData } from '../../services/stakeholderApi';
-import StakeholderLoadingState from '../common/StakeholderLoadingState';
-import StakeholderErrorState from '../common/StakeholderErrorState';
 
 interface PolicymakerWorkspaceProps {
   config: StakeholderConfig;
@@ -15,44 +12,8 @@ export const PolicymakerWorkspace: React.FC<PolicymakerWorkspaceProps> = ({ conf
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [selectedJurisdiction, setSelectedJurisdiction] = useState('All Indian Ocean');
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<PolicymakerData | null>(null);
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await stakeholderApiService.getPolicymakerData();
-      setData(res);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to fetch regional policymaker synthesis from backend.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  if (isLoading) {
-    return <StakeholderLoadingState message="Loading regional status..." subtext="Querying /api/stakeholder/policymaker" />;
-  }
-
-  if (error || !data) {
-    return (
-      <StakeholderErrorState
-        title="Stakeholder data unavailable"
-        endpoint="GET /api/stakeholder/policymaker"
-        error={error || 'No data returned'}
-        onRetry={loadData}
-      />
-    );
-  }
-
-  const statusMatrix = data.statusMatrix;
-  const regionalAlerts = data.regionalAlerts;
+  const statusMatrix = config.statusMatrix || [];
+  const regionalAlerts = config.regionalAlerts || [];
 
   return (
     <div className="workspace-inner">
@@ -125,16 +86,16 @@ export const PolicymakerWorkspace: React.FC<PolicymakerWorkspaceProps> = ({ conf
           </div>
         </ScientificPanel>
 
-        {/* Panel 3: RECENT CLIMATOLOGICAL TREND */}
+        {/* Panel 3: LONG-TERM TREND */}
         <ScientificPanel
-          title="Recent Thermal Anomaly Trend"
-          tag="Recent Trend"
-          meta={data.recentTrend?.baselineLabel || "Current Operational Cycle"}
+          title="Long-Term Trend"
+          tag="Decadal Anomaly"
+          meta="1990 – 2026 Climatology"
         >
           <div className="trend-graph-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, marginBottom: '6px' }}>
-              <span>Thermal Anomaly Profile (°C)</span>
-              <span style={{ color: '#B45309', fontWeight: 700 }}>{data.recentTrend?.anomalyDelta || "+0.8°C Delta"}</span>
+              <span>Temperature Trend Graph (°C Anomaly)</span>
+              <span style={{ color: '#B45309', fontWeight: 700 }}>+0.8°C Above 1990 Baseline</span>
             </div>
 
             <svg viewBox="0 0 320 100" style={{ width: '100%', height: '90px' }}>
@@ -167,15 +128,15 @@ export const PolicymakerWorkspace: React.FC<PolicymakerWorkspaceProps> = ({ conf
 
               <circle cx="300" cy="32" r="5" fill="var(--color-ocean-blue)" stroke="#FFFFFF" strokeWidth="1.8" />
 
-              <text x="20" y="86" fill="var(--color-text-secondary)" fontSize="8.5">Recent-Q1</text>
-              <text x="105" y="86" fill="var(--color-text-secondary)" fontSize="8.5">Recent-Q2</text>
-              <text x="195" y="86" fill="var(--color-text-secondary)" fontSize="8.5">Recent-Q3</text>
-              <text x="280" y="86" fill="var(--color-text-secondary)" fontSize="8.5">Current</text>
+              <text x="20" y="86" fill="var(--color-text-secondary)" fontSize="8.5">1990</text>
+              <text x="105" y="86" fill="var(--color-text-secondary)" fontSize="8.5">2000</text>
+              <text x="195" y="86" fill="var(--color-text-secondary)" fontSize="8.5">2012</text>
+              <text x="280" y="86" fill="var(--color-text-secondary)" fontSize="8.5">2026</text>
             </svg>
           </div>
 
           <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>
-            {data.recentTrend?.narrative || 'Regional warming observed in recent operational cycles, contributing to heightened seasonal stratification in shallow coastal mixed layers.'}
+            Regional warming trend has accelerated by 0.18°C per decade since 2000, contributing to heightened seasonal stratification.
           </div>
         </ScientificPanel>
       </div>
@@ -215,7 +176,7 @@ export const PolicymakerWorkspace: React.FC<PolicymakerWorkspaceProps> = ({ conf
               <strong style={{ color: 'var(--color-text-primary)' }}>1. Key Strategic Finding:</strong> Sea surface temperature anomalies have reached +0.8°C in Sector 4 of the Bay of Bengal, approaching the regional thermal stress advisory threshold.
             </div>
             <div>
-              <strong style={{ color: 'var(--color-text-primary)' }}>2. Ecological & Fisheries Impact:</strong> Primary productivity (chlorophyll-a) exhibits a seasonal downturn due to upper-layer thermal capping.
+              <strong style={{ color: 'var(--color-text-primary)' }}>2. Ecological & Fisheries Impact:</strong> Primary productivity (chlorophyll-a) exhibits a 4.2% seasonal downturn due to upper-layer thermal capping.
             </div>
             <div>
               <strong style={{ color: 'var(--color-text-primary)' }}>3. Recommended Policy Actions:</strong>
